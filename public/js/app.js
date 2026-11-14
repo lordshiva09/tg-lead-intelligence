@@ -36,6 +36,17 @@ const bulkProgressBar = document.getElementById('bulk-progress-bar');
 const bulkStatusText = document.getElementById('bulk-status-text');
 const saveAllHighBtn = document.getElementById('save-all-high-btn');
 
+// Receipt Modal elements
+const openReceiptBtn = document.getElementById('open-receipt-btn');
+const receiptUserCount = document.getElementById('receipt-user-count');
+const receiptModal = document.getElementById('receipt-modal');
+const receiptCloseBtn = document.getElementById('receipt-close-btn');
+const receiptBadgeTotal = document.getElementById('receipt-badge-total');
+const receiptListContainer = document.getElementById('receipt-list-container');
+const copyAllUsernamesBtn = document.getElementById('copy-all-usernames-btn');
+const downloadReceiptTxtBtn = document.getElementById('download-receipt-txt-btn');
+const downloadReceiptCsvBtn = document.getElementById('download-receipt-csv-btn');
+
 // Modal Elements
 const leadModal = document.getElementById('lead-modal');
 const modalCloseBtn = document.getElementById('modal-close-btn');
@@ -405,11 +416,16 @@ function renderLeadsTable() {
   }).join('');
 }
 
-// Update Top Bar Stats
+// Update Top Bar Stats & Receipt Count
 function updateStats() {
   statTotal.textContent = savedLeads.length;
   const highCount = savedLeads.filter(l => l.scores?.level === 'HIGH').length;
   statHigh.textContent = highCount;
+
+  const userCategoryCount = savedLeads.filter(l => (l.type || 'USER') === 'USER').length;
+  if (receiptUserCount) {
+    receiptUserCount.textContent = userCategoryCount;
+  }
 
   if (savedLeads.length > 0) {
     const sum = savedLeads.reduce((acc, l) => acc + (l.scores?.total || 0), 0);
@@ -557,6 +573,192 @@ document.addEventListener('keydown', (e) => {
     closeLeadModal();
   }
 });
+
+// ================= USER RECEIPT & DIRECT REDIRECT LOGIC =================
+
+function getUserCategoryLeads() {
+  return savedLeads.filter(l => (l.type || 'USER') === 'USER');
+}
+
+function openReceiptModal() {
+  const userLeads = getUserCategoryLeads();
+  receiptBadgeTotal.textContent = `${userLeads.length} Users`;
+
+  if (userLeads.length === 0) {
+    receiptListContainer.innerHTML = `
+      <div style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
+        <div style="font-size: 2rem; margin-bottom: 8px;">📭</div>
+        <p>No leads with <b>USER</b> classification found yet.</p>
+        <p style="font-size: 0.8rem; color: var(--text-faint);">Run a bulk keyword scan above to collect user profiles.</p>
+      </div>
+    `;
+  } else {
+    receiptListContainer.innerHTML = userLeads.map((u, i) => {
+      const handle = u.username ? `@${u.username}` : (u.id || `User_${i + 1}`);
+      const tgUrl = u.url || (u.username ? `https://t.me/${u.username}` : `tg://user?id=${u.id}`);
+      const score = u.scores?.total || 0;
+      const avatarSrc = u.avatar && u.avatar.startsWith('http') ? `/api/proxy-avatar?url=${encodeURIComponent(u.avatar)}` : (u.avatar || defaultAvatar);
+      const cleanHandleForCopy = u.username || u.id;
+
+      return `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(13, 21, 39, 0.6); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+            <img src="${avatarSrc}" onerror="this.src='${defaultAvatar}'" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" alt="Avatar">
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: #ffffff; font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${esc(u.name || u.username)}
+              </div>
+              <div style="font-size: 0.78rem; font-family: var(--font-mono); color: #38bdf8;">
+                ${esc(handle)} <span style="color: #64748b; font-size: 0.72rem;">(${score}/100)</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button type="button" class="btn-secondary copy-single-user-btn" data-copy="${esc(cleanHandleForCopy)}" title="Copy Username" style="padding: 6px 10px; font-size: 0.76rem;">
+              📋 Copy
+            </button>
+            <a href="${esc(tgUrl)}" target="_blank" rel="noopener noreferrer" class="btn-primary" title="Open directly in Telegram" style="padding: 6px 12px; font-size: 0.76rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">
+              <span>✈️</span> Chat
+            </a>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  receiptModal.style.display = 'flex';
+}
+
+function closeReceiptModal() {
+  receiptModal.style.display = 'none';
+}
+
+// Open Receipt Modal on Click
+if (openReceiptBtn) {
+  openReceiptBtn.addEventListener('click', openReceiptModal);
+}
+if (receiptCloseBtn) {
+  receiptCloseBtn.addEventListener('click', closeReceiptModal);
+}
+if (receiptModal) {
+  receiptModal.addEventListener('click', (e) => {
+    if (e.target === receiptModal) closeReceiptModal();
+  });
+}
+
+// Copy single username inside receipt list
+if (receiptListContainer) {
+  receiptListContainer.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.copy-single-user-btn');
+    if (copyBtn) {
+      const u = copyBtn.dataset.copy;
+      navigator.clipboard.writeText(u.startsWith('@') ? u : `@${u}`).then(() => {
+        showToast(`Copied ${u.startsWith('@') ? u : '@' + u} to clipboard!`);
+      }).catch(() => {
+        showToast('Failed to copy');
+      });
+    }
+  });
+}
+
+// Copy All Usernames to Clipboard
+if (copyAllUsernamesBtn) {
+  copyAllUsernamesBtn.addEventListener('click', () => {
+    const userLeads = getUserCategoryLeads();
+    if (userLeads.length === 0) {
+      showToast('No user leads available to copy');
+      return;
+    }
+    const handles = userLeads.map(u => {
+      const h = u.username || u.id;
+      return h.startsWith('@') ? h : `@${h}`;
+    }).join('\n');
+
+    navigator.clipboard.writeText(handles).then(() => {
+      showToast(`✓ Copied ${userLeads.length} usernames to clipboard!`);
+    }).catch(() => {
+      showToast('Failed to copy usernames');
+    });
+  });
+}
+
+// Download TXT Receipt with direct clickable/copyable Telegram links
+if (downloadReceiptTxtBtn) {
+  downloadReceiptTxtBtn.addEventListener('click', () => {
+    const userLeads = getUserCategoryLeads();
+    if (userLeads.length === 0) {
+      showToast('No user leads to export');
+      return;
+    }
+
+    const lines = [
+      '=================================================================',
+      '         TELEGRAM LEAD INTELLIGENCE - USER RECEIPT               ',
+      `         Generated: ${new Date().toLocaleString()}              `,
+      `         Total Verified Users: ${userLeads.length}              `,
+      '=================================================================\n'
+    ];
+
+    userLeads.forEach((u, i) => {
+      const handle = u.username ? `@${u.username}` : (u.id || 'N/A');
+      const directLink = u.url || (u.username ? `https://t.me/${u.username}` : `tg://user?id=${u.id}`);
+      lines.push(`${i + 1}. ${u.name || u.username || 'User'}`);
+      lines.push(`   Username/ID : ${handle}`);
+      lines.push(`   Direct Link : ${directLink}`);
+      lines.push(`   Quality Score: ${u.scores?.total || 0}/100 (${u.scores?.level || 'LOW'})`);
+      if (u.bio) lines.push(`   Bio         : ${u.bio.replace(/\r?\n/g, ' ')}`);
+      lines.push('-----------------------------------------------------------------');
+    });
+
+    lines.push('\n[END OF RECEIPT]');
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Telegram_User_Receipt_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✓ TXT Receipt downloaded successfully!');
+  });
+}
+
+// Download CSV of Users
+if (downloadReceiptCsvBtn) {
+  downloadReceiptCsvBtn.addEventListener('click', () => {
+    const userLeads = getUserCategoryLeads();
+    if (userLeads.length === 0) {
+      showToast('No user leads to export');
+      return;
+    }
+
+    const headers = ['Username', 'Display Name', 'Quality Score', 'Rating', 'Classification', 'Direct Telegram Link', 'Bio'];
+    const rows = userLeads.map(u => [
+      `"${u.username ? '@' + u.username : (u.id || '')}"`,
+      `"${(u.name || '').replace(/"/g, '""')}"`,
+      u.scores?.total || 0,
+      `"${u.scores?.level || ''}"`,
+      `"${u.type || 'USER'}"`,
+      `"${u.url || (u.username ? 'https://t.me/' + u.username : '')}"`,
+      `"${(u.bio || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Telegram_Users_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✓ Users CSV downloaded successfully!');
+  });
+}
 
 // Initial Setup
 fetchLeads();
