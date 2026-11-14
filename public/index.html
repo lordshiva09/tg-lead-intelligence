@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram Lead Intelligence & Agent Qualifier</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Header -->
+    <header class="top-nav">
+      <div class="nav-brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke="#38bdf8" stroke-dasharray="4 2"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="#22d3ee" stroke-width="2.5"/>
+            <circle cx="12" cy="12" r="3" fill="#38bdf8"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">TG LEAD INTEL <span class="badge-live">LIVE SCANNER</span></div>
+          <div class="brand-sub">Telegram Betting Agent & Prediction Lead Qualification Engine (MTProto API Powered)</div>
+        </div>
+      </div>
+
+      <div class="nav-stats">
+        <div class="stat-pill">
+          <span class="stat-lbl">Telegram API</span>
+          <span id="tg-connection-status" class="stat-val text-gold">Connecting...</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-lbl">Saved Leads</span>
+          <span id="stat-total" class="stat-val">1</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-lbl">High Potential</span>
+          <span id="stat-high" class="stat-val text-gold">1</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-lbl">Avg Score</span>
+          <span id="stat-avg" class="stat-val text-cyan">78%</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-container">
+      <!-- 1. MTProto Connect Section (if not authorized) -->
+      <section id="tg-auth-section" class="scanner-card" style="display: none; border-color: rgba(245, 158, 11, 0.4);">
+        <div class="scanner-head">
+          <h2 style="color: #fbbf24;">⚡ Connect Your Telegram Account (One-Time Setup)</h2>
+          <p>Your Telegram API ID & Hash are configured! Enter your phone number to receive the official Telegram OTP code and authorize global keyword search.</p>
+        </div>
+
+        <div id="auth-step-phone" class="scan-bar" style="max-width: 500px;">
+          <div class="input-wrap">
+            <span class="input-prefix">📞</span>
+            <input type="text" id="tg-phone-inp" placeholder="Enter phone with country code (e.g. +919876543210)" autocomplete="tel">
+          </div>
+          <button type="button" id="tg-send-code-btn" class="btn-primary">Send Code</button>
+        </div>
+
+        <div id="auth-step-code" class="scan-bar" style="display: none; max-width: 500px; margin-top: 12px;">
+          <div class="input-wrap">
+            <span class="input-prefix">🔑</span>
+            <input type="text" id="tg-otp-inp" placeholder="Enter OTP code received on Telegram..." autocomplete="one-time-code">
+          </div>
+          <button type="button" id="tg-verify-code-btn" class="btn-primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">Verify & Connect</button>
+        </div>
+        <div id="auth-status-msg" style="margin-top: 8px; font-size: 0.85rem; color: #94a3b8;"></div>
+      </section>
+
+      <!-- 2. MTProto Bulk Keyword Search Section -->
+      <section class="scanner-card" style="background: linear-gradient(180deg, #0f172a 0%, #070b14 100%); border: 1px solid rgba(56, 189, 248, 0.25);">
+        <div class="scanner-head">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <h2 style="color: #38bdf8; margin: 0;">🌐 Bulk Telegram Keyword Scanner (All IDs & Bios)</h2>
+            <span class="badge-user" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4);">
+              API ID: 35214728 Active
+            </span>
+          </div>
+          <p>Search all public channels, groups, and users across Telegram. Extracts bios, filters by keywords, and scores all profiles automatically.</p>
+        </div>
+
+        <form id="bulk-search-form" class="scan-bar">
+          <div class="input-wrap">
+            <span class="input-prefix">🔍</span>
+            <input type="text" id="bulk-keywords-inp" value="agent, teacher, dmwin, yaarwin, vip prediction, 6eclub" placeholder="Comma-separated keywords (e.g. agent, teacher, dmwin, tiranga)..." autocomplete="off" required>
+          </div>
+          <button type="submit" id="bulk-search-btn" class="btn-primary">
+            <span class="btn-icon">🚀</span>
+            <span class="btn-text">Scan All Telegram IDs</span>
+          </button>
+        </form>
+
+        <div class="quick-chips">
+          <span class="chip-label">Presets:</span>
+          <button type="button" class="chip" data-bulk="agent, teacher, supervisor, recruiter">Agents & Teachers</button>
+          <button type="button" class="chip" data-bulk="dmwin, yaarwin, 6eclub, 91club, tiranga">Betting Platforms</button>
+          <button type="button" class="chip" data-bulk="vip signal, prediction, win go, lottery trader">Prediction & Signals</button>
+          <button type="button" class="chip" data-bulk="salary, commission, daily bonus, usdt earning">Monetization / Salary</button>
+        </div>
+
+        <div id="bulk-progress-bar" style="display: none; margin-top: 14px; padding: 12px 16px; background: rgba(56, 189, 248, 0.08); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.2);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="spinner" style="width: 20px; height: 20px; border: 2px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <span id="bulk-status-text" style="color: #e2e8f0; font-size: 0.9rem;">Scanning Telegram API across keywords...</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Single Profile Deep Scanner (Direct t.me inspect) -->
+      <section class="scanner-card">
+        <div class="scanner-head">
+          <h2>Single Profile Deep Scanner</h2>
+          <p>Inspect any specific username, scrape live bio and render the exact Elite Quality Score breakdown card.</p>
+        </div>
+
+        <form id="scan-form" class="scan-bar">
+          <div class="input-wrap">
+            <span class="input-prefix">@</span>
+            <input type="text" id="username-inp" placeholder="Enter username or t.me link (e.g. dmfirst2, yaarwin_support)..." autocomplete="off" required>
+            <button type="button" id="clear-inp-btn" class="clear-btn" title="Clear">✕</button>
+          </div>
+          <button type="submit" id="scan-btn" class="btn-primary">
+            <span class="btn-icon">⚡</span>
+            <span class="btn-text">Analyze Profile</span>
+          </button>
+        </form>
+
+        <div class="quick-chips">
+          <span class="chip-label">Quick Test Leads:</span>
+          <button type="button" class="chip" data-user="dmfirst2">@dmfirst2 (Reference)</button>
+          <button type="button" class="chip" data-user="yaarwin_official">@yaarwin_official</button>
+          <button type="button" class="chip" data-user="tiranga_vip_mentor">@tiranga_vip_mentor</button>
+          <button type="button" class="chip" data-user="dmwin_agent_recruiter">@dmwin_agent_recruiter</button>
+        </div>
+      </section>
+
+      <!-- 4. Leads CRM Section -->
+      <section class="crm-section">
+        <div class="crm-header">
+          <div class="crm-title-area">
+            <h3>Scored Leads Database</h3>
+            <span id="leads-counter" class="leads-counter">Showing 1 lead</span>
+          </div>
+
+          <div class="crm-actions">
+            <div class="search-mini">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" id="table-search" placeholder="Filter by name, keyword...">
+            </div>
+
+            <select id="filter-level" class="filter-select">
+              <option value="ALL">All Scores</option>
+              <option value="HIGH">High (70 - 100)</option>
+              <option value="MEDIUM">Medium (40 - 69)</option>
+              <option value="LOW">Low (0 - 39)</option>
+            </select>
+
+            <button type="button" id="save-all-high-btn" class="btn-secondary" style="display: none; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b;">
+              💾 Save All High Leads
+            </button>
+
+            <a href="/api/export-csv" class="btn-secondary" download>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </a>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>Profile</th>
+                <th>Handle / ID</th>
+                <th>Quality Score</th>
+                <th>Classification</th>
+                <th>Detected Keywords</th>
+                <th>Scanned Date</th>
+                <th style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <div id="empty-state" class="empty-state" style="display: none;">
+            <p>No leads found matching current filter.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Inspection Modal (Exact Screenshot Layout) -->
+    <div id="lead-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card">
+        <!-- Close button top-right -->
+        <button id="modal-close-btn" class="modal-close" title="Close">✕</button>
+
+        <!-- Profile Header -->
+        <div class="profile-header">
+          <div class="profile-avatar-wrap">
+            <img id="card-avatar" class="profile-avatar" src="" alt="Avatar">
+            <div class="avatar-ring"></div>
+          </div>
+          <div class="profile-info">
+            <div class="profile-handle-row">
+              <span id="card-handle-head" class="profile-handle">@dmfirst2</span>
+              <span id="card-type-badge" class="badge-user">USER</span>
+            </div>
+            <div id="card-name" class="profile-name">DMFIRST CELESTINE</div>
+            <div id="card-handle-sub" class="profile-sub-handle">@dmfirst2</div>
+            <div class="profile-link-row">
+              <a id="card-link" href="#" target="_blank" class="profile-link">https://t.me/dmfirst2</a>
+              <button id="card-link-open" class="icon-btn" title="Open Telegram">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </button>
+              <button id="card-link-copy" class="icon-btn" title="Copy Link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 1: ELITE QUALITY SCORING FORMULA -->
+        <div class="score-card">
+          <div class="score-card-head">
+            <div class="score-card-title">
+              <span class="icon-medal">🏅</span>
+              <span>ELITE QUALITY SCORING FORMULA</span>
+            </div>
+            <div class="score-card-total">
+              <div class="score-fraction">
+                <span id="card-total-score" class="score-num">78</span>
+                <span class="score-denom">/ 100</span>
+              </div>
+              <div id="card-level-label" class="score-level">(HIGH)</div>
+            </div>
+          </div>
+
+          <!-- 2x2 Breakdown Grid -->
+          <div class="metrics-grid">
+            <div class="metric-cell">
+              <div class="metric-lbl">Bio Relevance</div>
+              <div id="card-score-bio" class="metric-val text-gold">28 / 40 pts</div>
+            </div>
+            <div class="metric-cell">
+              <div class="metric-lbl">Completeness</div>
+              <div id="card-score-comp" class="metric-val text-cyan">25 / 25 pts</div>
+            </div>
+            <div class="metric-cell">
+              <div class="metric-lbl">Public Evidence</div>
+              <div id="card-score-evi" class="metric-val text-purple">10 / 20 pts</div>
+            </div>
+            <div class="metric-cell">
+              <div class="metric-lbl">Reliability</div>
+              <div id="card-score-rel" class="metric-val text-green">15 / 15 pts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: PUBLIC BIO & KEYWORD INTELLIGENCE -->
+        <div class="bio-card">
+          <div class="bio-card-head">
+            <span class="icon-layers">🥞</span>
+            <span>PUBLIC BIO & KEYWORD INTELLIGENCE</span>
+          </div>
+
+          <div id="card-bio-text" class="bio-content-box">
+            <!-- Rendered with highlighted keyword pills -->
+          </div>
+
+          <div class="detected-row">
+            <span class="detected-lbl">Detected Matches:</span>
+            <div id="card-matches-pills" class="detected-pills">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="modal-footer-row">
+          <button id="modal-save-btn" class="btn-save">
+            <span>💾</span> Save to Leads CRM
+          </button>
+          <a id="modal-chat-btn" href="#" target="_blank" class="btn-chat">
+            <span>✈️</span> Chat on Telegram
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast" style="display: none;"></div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

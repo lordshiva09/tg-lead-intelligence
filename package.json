@@ -1,0 +1,22 @@
+{
+  "name": "tg-lead-intelligence",
+  "version": "1.0.0",
+  "description": "Telegram Agent & Prediction Lead Intelligence and Quality Scoring Tool",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "telegram",
+    "lead-scoring",
+    "osint",
+    "agent-recruiter",
+    "igaming"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "input": "^1.0.1",
+    "telegram": "^2.26.22"
+  }
+}
