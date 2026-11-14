@@ -423,7 +423,7 @@ function updateStats() {
   const highCount = savedLeads.filter(l => l.scores?.level === 'HIGH').length;
   statHigh.textContent = highCount;
 
-  const userCategoryCount = savedLeads.filter(l => (l.type || 'USER') === 'USER').length;
+  const userCategoryCount = getUserCategoryLeads().length;
   if (receiptUserCount) {
     receiptUserCount.textContent = userCategoryCount;
   }
@@ -577,8 +577,24 @@ document.addEventListener('keydown', (e) => {
 
 // ================= USER RECEIPT & DIRECT REDIRECT LOGIC =================
 
+// Helper: check if a lead qualifies for User/Agent receipt
+function isEligibleForUserReceipt(lead) {
+  const type = (lead.type || 'USER').toUpperCase();
+  if (type === 'USER') return true;
+
+  // Include BOT only if related to agent, teacher, mentor, CSR, or prediction
+  if (type === 'BOT') {
+    const textToScan = `${lead.username || ''} ${lead.name || ''} ${lead.bio || ''}`.toLowerCase();
+    const isAgentTeacherRelated = /agent|teacher|mentor|csr|support|recruiter|official|prediction|forecast|team|assistant/i.test(textToScan);
+    const hasMatches = (lead.matches || []).some(m => ['AGENT', 'TEACHER', 'SALARY/COMM'].includes(String(m).toUpperCase()));
+    return isAgentTeacherRelated || hasMatches;
+  }
+
+  return false;
+}
+
 function getUserCategoryLeads() {
-  return savedLeads.filter(l => (l.type || 'USER') === 'USER');
+  return savedLeads.filter(isEligibleForUserReceipt);
 }
 
 function openReceiptModal() {
@@ -600,6 +616,10 @@ function openReceiptModal() {
       const score = u.scores?.total || 0;
       const avatarSrc = u.avatar && u.avatar.startsWith('http') ? `/api/proxy-avatar?url=${encodeURIComponent(u.avatar)}` : (u.avatar || defaultAvatar);
       const cleanHandleForCopy = u.username || u.id;
+      const isBot = (u.type || '').toUpperCase() === 'BOT';
+      const badgeHtml = isBot 
+        ? '<span style="font-size:0.65rem;font-weight:700;padding:1px 5px;background:rgba(129,140,248,0.2);color:#818cf8;border:1px solid rgba(129,140,248,0.4);border-radius:4px;margin-left:5px;">BOT</span>' 
+        : '';
 
       return `
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(13, 21, 39, 0.6); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; gap: 10px;">
@@ -607,7 +627,7 @@ function openReceiptModal() {
             <img src="${avatarSrc}" onerror="this.src='${defaultAvatar}'" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" alt="Avatar">
             <div style="min-width: 0;">
               <div style="font-weight: 700; color: #ffffff; font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${esc(u.name || u.username)}
+                ${esc(u.name || u.username)} ${badgeHtml}
               </div>
               <div style="font-size: 0.78rem; font-family: var(--font-mono); color: #38bdf8;">
                 ${esc(handle)} <span style="color: #64748b; font-size: 0.72rem;">(${score}/100)</span>
