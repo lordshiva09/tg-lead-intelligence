@@ -224,18 +224,11 @@ bulkSearchForm.addEventListener('submit', async (e) => {
     if (!data.ok) throw new Error(data.error || 'Bulk search failed');
 
     recentScanResults = data.leads || [];
-    showToast(`✓ Found ${recentScanResults.length} Telegram IDs matching keywords!`);
-    bulkStatusText.textContent = `Done! Found ${recentScanResults.length} matching public IDs & channels.`;
+    showToast(`✓ Found ${recentScanResults.length} Telegram IDs matching "${kw}"!`);
+    bulkStatusText.textContent = `Done! Found ${recentScanResults.length} matching profiles for "${kw}".`;
 
-    // Merge into local list for viewing
-    for (const lead of recentScanResults) {
-      const idx = savedLeads.findIndex(l => (l.username && lead.username && l.username.toLowerCase() === lead.username.toLowerCase()) || (l.id && lead.id && l.id === lead.id));
-      if (idx >= 0) {
-        savedLeads[idx] = { ...savedLeads[idx], ...lead };
-      } else {
-        savedLeads.unshift(lead);
-      }
-    }
+    // Replace current table view with only fresh search results
+    savedLeads = recentScanResults;
 
     renderLeadsTable();
     updateStats();
