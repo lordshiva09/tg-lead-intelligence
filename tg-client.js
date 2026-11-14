@@ -3,11 +3,10 @@
  * Uses GramJS (telegram package) to search public channels/groups/users and extract bio.
  * Direct MTProto Auth Methods (sendCode + Api.auth.SignIn)
  * 
- * Includes:
- * 1. Deep Query Decomposition (Prefix/Suffix stemmer: e.g. 'tdmplay' -> 'tdmplay', 'dmplay', 'teacher dmplay', 'agent dmplay', 'csr dmplay', etc.)
- * 2. Multi-pattern Expansion (TinaDmplay, teacherdmplay, TaradmplayCSR, Dmplay_agent, etc.)
- * 3. contacts.Search across all variants with deduplication
- * 4. messages.SearchGlobal across public groups/channels for bios/posts
+ * Features:
+ * 1. Targeted Sub-Query Generator (e.g. 'DmplayA' -> 'DmplayA', 'Dmplay_A', 'Dmplay A', 'Dmplay Aru', etc.)
+ * 2. Prefix & Suffix Expansion (e.g. 'Admplay' -> 'Admplay', 'A Dmplay', 'A_Dmplay')
+ * 3. Strict Relevance Filter (Ensures only exact matching handles/bios are returned, no unrelated agents)
  */
 const { TelegramClient, Api } = require('telegram');
 const { StringSession } = require('telegram/sessions');
@@ -28,11 +27,9 @@ let loginState = {
 };
 
 function getSavedSession() {
-  // 1. Check environment variable first (Ideal for Render / cloud deployments)
   if (process.env.TG_SESSION && process.env.TG_SESSION.trim()) {
     return process.env.TG_SESSION.trim();
   }
-  // 2. Check local session file
   try {
     if (fs.existsSync(SESSION_FILE)) {
       return fs.readFileSync(SESSION_FILE, 'utf8').trim();
@@ -161,74 +158,115 @@ function getAuthStatus() {
 }
 
 /**
- * Intelligent Query Decomposer & Family Expander
- * Handles queries like 'tdmplay' by stripping prefixes ('t', 'dm') and finding root ('dmplay', 'play')
- * Generates combinations like:
- * - 'tdmplay'
- * - 'dmplay'
- * - 'teacher dmplay' (teacherdmplay)
- * - 'tina dmplay' (TinaDmplay)
- * - 'tara dmplay' (TaradmplayCSR)
- * - 'agent dmplay'
- * - 'csr dmplay'
- * - 'dmplay csr'
- * - 'support dmplay'
- * - 'official dmplay'
+ * Intelligent Query Generator for prefix/suffix patterns
+ * 
+ * Case 1: 'DmplayA' -> user wants accounts starting with/containing 'dmplay' + 'a...'
+ *   Generates: ['DmplayA', 'Dmplay_A', 'Dmplay A', 'dmplay a']
+ * 
+ * Case 2: 'Admplay' -> user wants accounts starting with 'A' and containing 'dmplay' (like AjuDmplay, ALLI_DmPlay)
+ *   Generates: ['Admplay', 'A Dmplay', 'A_Dmplay', 'Aju Dmplay']
+ * 
+ * Case 3: Standard single words ('agent', 'teacher') -> expands to related terms
  */
 function generateKeywordVariants(query) {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
+  const qLower = q.toLowerCase();
   const variants = [q];
 
-  // Common root extraction (e.g. 'tdmplay' -> 'dmplay')
-  let root = q;
-  if (/^[a-z](dmplay|dmwin|yaarwin|tiranga|6eclub|91club)/i.test(q)) {
-    root = q.slice(1); // 'tdmplay' -> 'dmplay'
-    variants.push(root);
-  } else if (/^(teacher|tina|tara|agent|csr|vip|official)(.*)/i.test(q)) {
-    const m = q.match(/^(teacher|tina|tara|agent|csr|vip|official)(.*)/i);
-    if (m && m[2] && m[2].length >= 3) {
-      root = m[2];
-      variants.push(root);
-    }
-  }
-
-  // Common gaming platform stems
-  const platformKeywords = ['dmplay', 'dmwin', 'yaarwin', 'dmfirst', 'tiranga', '6eclub', '91club', 'jaldiwin', 'okwin'];
-  const matchedPlat = platformKeywords.find(p => q.includes(p) || p.includes(q));
-  if (matchedPlat) {
-    root = matchedPlat;
-    variants.push(root);
-  }
-
-  // Cross-combinations with prefixes and suffixes for this family
-  if (root.length >= 3) {
+  // Pattern A: Root + Letter/Suffix (e.g. 'dmplaya', 'dmplayj', 'dmwinb')
+  const rootSuffixMatch = qLower.match(/^(dmplay|dmwin|yaarwin|dmfirst|tiranga|6eclub|91club)([a-z0-9_]+)$/i);
+  if (rootSuffixMatch) {
+    const root = rootSuffixMatch[1];
+    const suffix = rootSuffixMatch[2];
     variants.push(
-      `teacher ${root}`,
-      `agent ${root}`,
-      `csr ${root}`,
-      `${root} csr`,
-      `support ${root}`,
-      `official ${root}`,
-      `tina ${root}`,
-      `tara ${root}`,
-      `${root} teacher`,
-      `${root} agent`
+      `${root}${suffix}`,
+      `${root}_${suffix}`,
+      `${root} ${suffix}`,
+      `${suffix}_${root}`,
+      `${suffix} ${root}`
     );
+    return [...new Set(variants)];
   }
 
-  if (q === 'agent') {
+  // Pattern B: Prefix Letter + Root (e.g. 'admplay', 'tdmplay', 'jdmplay')
+  const prefixRootMatch = qLower.match(/^([a-z0-9_]+)(dmplay|dmwin|yaarwin|dmfirst|tiranga|6eclub|91club)$/i);
+  if (prefixRootMatch) {
+    const prefix = prefixRootMatch[1];
+    const root = prefixRootMatch[2];
+    variants.push(
+      `${prefix}${root}`,
+      `${prefix} ${root}`,
+      `${prefix}_${root}`,
+      `${root}_${prefix}`,
+      `${root} ${prefix}`
+    );
+    return [...new Set(variants)];
+  }
+
+  // Pattern C: General keywords
+  if (qLower === 'agent') {
     variants.push('agents', 'agent recruiter', 'agent team', 'dmwin agent', 'yaarwin agent', 'vip agent', 'super agent');
-  } else if (q === 'teacher') {
+  } else if (qLower === 'teacher') {
     variants.push('teachers', 'mentor', 'teacher prediction', 'dmwin teacher', 'vip teacher');
-  } else if (q === 'prediction') {
+  } else if (qLower === 'prediction') {
     variants.push('vip prediction', 'prediction channel', 'wingo prediction', 'lottery prediction', 'signals');
   }
 
-  return [...new Set(variants)].slice(0, 8); // Top 8 variants
+  return [...new Set(variants)].slice(0, 5);
 }
 
-// Search Telegram with query expansion + root variations + global messages
-async function searchTelegram(query, limit = 60) {
+/**
+ * Precision Relevance Filter
+ * Checks if a profile truly belongs to the user's intended search.
+ * Filters out completely unrelated agents/channels that Telegram randomly spits out.
+ */
+function isProfileRelevant(profile, originalQuery) {
+  const qNorm = originalQuery.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!qNorm) return true;
+
+  const usernameNorm = (profile.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const nameNorm = (profile.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const bioNorm = (profile.bio || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 1. Direct substring match in username, name, or bio
+  if (usernameNorm.includes(qNorm) || nameNorm.includes(qNorm) || bioNorm.includes(qNorm)) {
+    return true;
+  }
+
+  // 2. Check prefix letter + root pattern (e.g. q = 'admplay', username = 'ajudmplay' or 'allidmplay')
+  const prefixRootMatch = qNorm.match(/^([a-z0-9])(dmplay|dmwin|yaarwin|tiranga|6eclub|91club)$/);
+  if (prefixRootMatch) {
+    const prefix = prefixRootMatch[1];
+    const root = prefixRootMatch[2];
+    // Must start with prefix AND contain root
+    if (usernameNorm.startsWith(prefix) && usernameNorm.includes(root)) return true;
+    if (nameNorm.startsWith(prefix) && nameNorm.includes(root)) return true;
+    if (usernameNorm.includes(root) && usernameNorm.includes(prefix)) return true;
+  }
+
+  // 3. Check root + suffix pattern (e.g. q = 'dmplaya', username = 'dmplayaru' or 'dmplayalina')
+  const rootSuffixMatch = qNorm.match(/^(dmplay|dmwin|yaarwin|tiranga|6eclub|91club)([a-z0-9])$/);
+  if (rootSuffixMatch) {
+    const root = rootSuffixMatch[1];
+    const suffix = rootSuffixMatch[2];
+    if (usernameNorm.includes(root + suffix) || nameNorm.includes(root + suffix) || bioNorm.includes(root + suffix)) {
+      return true;
+    }
+    if (usernameNorm.startsWith(suffix) && usernameNorm.includes(root)) return true;
+  }
+
+  // 4. If query is a general keyword ('agent', 'teacher', etc.), check if word is in bio or name
+  if (['agent', 'teacher', 'prediction', 'signals', 'salary'].includes(qNorm)) {
+    const rawBio = (profile.bio || '').toLowerCase();
+    const rawName = (profile.name || '').toLowerCase();
+    return rawBio.includes(qNorm) || rawName.includes(qNorm) || usernameNorm.includes(qNorm);
+  }
+
+  return false;
+}
+
+// Search Telegram with query expansion + relevance filtering
+async function searchTelegram(query, limit = 50) {
   if (!client || !isConnected) {
     throw new Error('Telegram client is not authorized. Please connect with your Telegram account first.');
   }
@@ -238,7 +276,6 @@ async function searchTelegram(query, limit = 60) {
 
   for (const variant of variants) {
     try {
-      // 1. contacts.Search API
       const result = await client.invoke(
         new Api.contacts.Search({
           q: variant,
@@ -263,10 +300,10 @@ async function searchTelegram(query, limit = 60) {
             const fullUser = await client.invoke(new Api.users.GetFullUser({ id: u.id }));
             bio = fullUser?.fullUser?.about || fullUser?.about || '';
           } catch (e) {
-            // Bio fetch fallback
+            // Bio fallback
           }
 
-          leadsMap.set(key, {
+          const candidate = {
             id: `tg_user_${u.id}`,
             username: username || `id_${u.id}`,
             name: fullName,
@@ -276,7 +313,12 @@ async function searchTelegram(query, limit = 60) {
             type: u.bot ? 'BOT' : 'USER',
             url: username ? `https://t.me/${username}` : `tg://user?id=${u.id}`,
             fetchedAt: new Date().toISOString()
-          });
+          };
+
+          // Apply precision relevance check
+          if (isProfileRelevant(candidate, query)) {
+            leadsMap.set(key, candidate);
+          }
         }
       }
 
@@ -298,10 +340,10 @@ async function searchTelegram(query, limit = 60) {
               bio = fullChannel?.fullChat?.about || fullChannel?.about || '';
             }
           } catch (e) {
-            // Fallback
+            // Bio fallback
           }
 
-          leadsMap.set(key, {
+          const candidate = {
             id: `tg_chat_${c.id}`,
             username: username || `chat_${c.id}`,
             name: title,
@@ -311,62 +353,17 @@ async function searchTelegram(query, limit = 60) {
             type,
             url: username ? `https://t.me/${username}` : '',
             fetchedAt: new Date().toISOString()
-          });
+          };
+
+          // Apply precision relevance check
+          if (isProfileRelevant(candidate, query)) {
+            leadsMap.set(key, candidate);
+          }
         }
       }
-
-      if (leadsMap.size >= limit * 1.5) break;
     } catch (err) {
-      console.warn(`Query variant "${variant}" failed:`, err.message);
+      console.warn(`Query variant "${variant}" notice:`, err.message);
     }
-  }
-
-  // 2. SearchGlobal across public groups/channels
-  try {
-    const rootSearch = variants[1] || query;
-    const msgRes = await client.invoke(
-      new Api.messages.SearchGlobal({
-        q: rootSearch,
-        filter: new Api.InputMessagesFilterEmpty(),
-        minDate: 0,
-        maxDate: 0,
-        offsetRate: 0,
-        offsetPeer: new Api.InputPeerEmpty(),
-        offsetId: 0,
-        limit: 25
-      })
-    );
-
-    if (msgRes.users && msgRes.users.length) {
-      for (const u of msgRes.users) {
-        if (u.deleted) continue;
-        const key = u.username ? u.username.toLowerCase() : `id_${u.id}`;
-        if (leadsMap.has(key)) continue;
-
-        const username = u.username || '';
-        const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ') || username || `User_${u.id}`;
-
-        let bio = '';
-        try {
-          const fullUser = await client.invoke(new Api.users.GetFullUser({ id: u.id }));
-          bio = fullUser?.fullUser?.about || fullUser?.about || '';
-        } catch (e) {}
-
-        leadsMap.set(key, {
-          id: `tg_user_${u.id}`,
-          username: username || `id_${u.id}`,
-          name: fullName,
-          avatar: username ? `https://t.me/i/userpic/320/${username}.jpg` : 'assets/default_avatar.svg',
-          bio: bio,
-          extra: `@${username || u.id}`,
-          type: u.bot ? 'BOT' : 'USER',
-          url: username ? `https://t.me/${username}` : `tg://user?id=${u.id}`,
-          fetchedAt: new Date().toISOString()
-        });
-      }
-    }
-  } catch (e) {
-    console.warn('messages.SearchGlobal fallback notice:', e.message);
   }
 
   return Array.from(leadsMap.values());
