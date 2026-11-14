@@ -31,6 +31,7 @@ const authStatusMsg = document.getElementById('auth-status-msg');
 // Bulk search elements
 const bulkSearchForm = document.getElementById('bulk-search-form');
 const bulkKeywordsInp = document.getElementById('bulk-keywords-inp');
+const clearBulkInpBtn = document.getElementById('clear-bulk-inp-btn');
 const bulkSearchBtn = document.getElementById('bulk-search-btn');
 const bulkProgressBar = document.getElementById('bulk-progress-bar');
 const bulkStatusText = document.getElementById('bulk-status-text');
@@ -284,6 +285,13 @@ document.querySelectorAll('[data-bulk]').forEach(btn => {
     bulkSearchForm.dispatchEvent(new Event('submit'));
   });
 });
+
+if (clearBulkInpBtn) {
+  clearBulkInpBtn.addEventListener('click', () => {
+    bulkKeywordsInp.value = '';
+    bulkKeywordsInp.focus();
+  });
+}
 
 // Render Modal Card
 function openLeadModal(lead) {
