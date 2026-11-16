@@ -20,12 +20,17 @@ const filterLevel = document.getElementById('filter-level');
 // Telegram API elements
 const tgConnStatus = document.getElementById('tg-connection-status');
 const tgAuthSection = document.getElementById('tg-auth-section');
+const tgConnectedSection = document.getElementById('tg-connected-section');
+const connectedPhoneDisplay = document.getElementById('connected-phone-display');
+const copySessionBtn = document.getElementById('copy-session-btn');
+const tgLogoutBtn = document.getElementById('tg-logout-btn');
 const authStepPhone = document.getElementById('auth-step-phone');
 const authStepCode = document.getElementById('auth-step-code');
 const tgPhoneInp = document.getElementById('tg-phone-inp');
 const tgOtpInp = document.getElementById('tg-otp-inp');
 const tgSendCodeBtn = document.getElementById('tg-send-code-btn');
 const tgVerifyCodeBtn = document.getElementById('tg-verify-code-btn');
+const tgChangePhoneBtn = document.getElementById('tg-change-phone-btn');
 const authStatusMsg = document.getElementById('auth-status-msg');
 
 // Bulk search elements
@@ -119,11 +124,18 @@ async function checkTgStatus() {
     if (data.isConnected) {
       tgConnStatus.textContent = 'ONLINE (Ready)';
       tgConnStatus.className = 'stat-val text-green';
-      tgAuthSection.style.display = 'none';
+      if (tgAuthSection) tgAuthSection.style.display = 'none';
+      if (tgConnectedSection) {
+        tgConnectedSection.style.display = 'block';
+        if (connectedPhoneDisplay) {
+          connectedPhoneDisplay.textContent = data.phone || 'Authorized Session';
+        }
+      }
     } else {
       tgConnStatus.textContent = 'LOGIN NEEDED';
       tgConnStatus.className = 'stat-val text-gold';
-      tgAuthSection.style.display = 'block';
+      if (tgAuthSection) tgAuthSection.style.display = 'block';
+      if (tgConnectedSection) tgConnectedSection.style.display = 'none';
     }
   } catch (err) {
     tgConnStatus.textContent = 'ERROR';
@@ -131,17 +143,80 @@ async function checkTgStatus() {
   }
 }
 
+// Handle Change Phone / Back button
+if (tgChangePhoneBtn) {
+  tgChangePhoneBtn.addEventListener('click', () => {
+    authStepCode.style.display = 'none';
+    authStepPhone.style.display = 'flex';
+    tgSendCodeBtn.disabled = false;
+    tgSendCodeBtn.textContent = 'Send Code';
+    authStatusMsg.innerHTML = '';
+  });
+}
+
+// Handle Copy Session for Render
+if (copySessionBtn) {
+  copySessionBtn.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/tg-status');
+      const data = await res.json();
+      if (data.sessionStr) {
+        await navigator.clipboard.writeText(data.sessionStr);
+        showToast('✓ TG_SESSION copied to clipboard! Render Environment Variables me add karein.');
+      } else {
+        showToast('Session string not found in status.');
+      }
+    } catch (e) {
+      showToast('Clipboard copy failed: ' + e.message);
+    }
+  });
+}
+
+// Handle Disconnect / Reset
+if (tgLogoutBtn) {
+  tgLogoutBtn.addEventListener('click', async () => {
+    if (!confirm('Kya aap Telegram session disconnect karna chahte hain?')) return;
+    try {
+      const res = await fetch('/api/tg-reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('Telegram session reset successful');
+        authStepCode.style.display = 'none';
+        authStepPhone.style.display = 'flex';
+        tgSendCodeBtn.disabled = false;
+        tgSendCodeBtn.textContent = 'Send Code';
+        authStatusMsg.innerHTML = '';
+        checkTgStatus();
+      }
+    } catch (e) {
+      showToast('Error: ' + e.message);
+    }
+  });
+}
+
 // Handle Send Phone OTP
 tgSendCodeBtn.addEventListener('click', async () => {
-  const phone = tgPhoneInp.value.trim();
+  let phone = tgPhoneInp.value.trim();
   if (!phone) {
     showToast('Please enter your phone number with country code (e.g. +91...)');
     return;
   }
+
+  // Pre-normalize phone
+  phone = phone.replace(/[\s\-\(\)]/g, '');
+  if (!phone.startsWith('+')) {
+    if (phone.length === 10) {
+      phone = '+91' + phone;
+      tgPhoneInp.value = phone;
+    } else {
+      phone = '+' + phone;
+      tgPhoneInp.value = phone;
+    }
+  }
+
   tgSendCodeBtn.disabled = true;
   tgSendCodeBtn.textContent = 'Sending...';
-  authStatusMsg.textContent = 'Requesting Telegram OTP code...';
-  authStatusMsg.style.color = '#38bdf8';
+  authStatusMsg.innerHTML = '<span style="color: #38bdf8;">⏳ Telegram API se OTP request kar rahe hain... Kripya 5-10 second rukiye...</span>';
 
   try {
     const res = await fetch('/api/tg-send-code', {
@@ -153,15 +228,22 @@ tgSendCodeBtn.addEventListener('click', async () => {
     if (data.ok) {
       authStepPhone.style.display = 'none';
       authStepCode.style.display = 'flex';
-      authStatusMsg.textContent = '✓ OTP Code sent to your Telegram app/SMS! Please enter below:';
+      authStatusMsg.innerHTML = '✅ <strong>OTP bhej diya gaya hai!</strong><br>' +
+        '👉 Kripya apna <strong>Telegram App</strong> open karke "Telegram" official message se 5-digit code dekhein (SMS me nahi aayega).';
       authStatusMsg.style.color = '#4ade80';
-      showToast('OTP code sent successfully!');
+      showToast('OTP sent to Telegram App!');
+      tgOtpInp.focus();
     } else {
       throw new Error(data.error || 'Failed to send OTP');
     }
   } catch (err) {
-    authStatusMsg.textContent = 'Error: ' + err.message;
-    authStatusMsg.style.color = '#f87171';
+    let errMsg = err.message || 'Failed to send OTP';
+    if (errMsg.includes('FLOOD_WAIT') || errMsg.includes('wait of')) {
+      errMsg = '⚠️ Telegram Rate Limit: Telegram ne temporarily limit kiya hai. Kripya thoda wait karke dobara try karein (' + errMsg + ')';
+    } else if (errMsg.includes('PHONE_NUMBER_INVALID')) {
+      errMsg = '❌ Invalid Phone Number! Kripya sahi country code ke sath daalein (e.g. +919876543210)';
+    }
+    authStatusMsg.innerHTML = '<span style="color: #f87171;">' + errMsg + '</span>';
     tgSendCodeBtn.disabled = false;
     tgSendCodeBtn.textContent = 'Send Code';
   }
@@ -176,8 +258,7 @@ tgVerifyCodeBtn.addEventListener('click', async () => {
   }
   tgVerifyCodeBtn.disabled = true;
   tgVerifyCodeBtn.textContent = 'Verifying...';
-  authStatusMsg.textContent = 'Authorizing with Telegram servers...';
-  authStatusMsg.style.color = '#38bdf8';
+  authStatusMsg.innerHTML = '<span style="color: #38bdf8;">⏳ Telegram servers se verify kar rahe hain...</span>';
 
   try {
     const res = await fetch('/api/tg-verify-code', {
@@ -188,7 +269,7 @@ tgVerifyCodeBtn.addEventListener('click', async () => {
     const data = await res.json();
     if (data.ok) {
       showToast('✓ Successfully connected Telegram API!');
-      authStatusMsg.textContent = '✓ Connected! Global keyword scanner is ready to use.';
+      authStatusMsg.innerHTML = '✅ <strong>Connected!</strong> Telegram global keyword scanner ab active hai.';
       authStatusMsg.style.color = '#4ade80';
       setTimeout(() => {
         checkTgStatus();
@@ -197,8 +278,7 @@ tgVerifyCodeBtn.addEventListener('click', async () => {
       throw new Error(data.error || 'Invalid code');
     }
   } catch (err) {
-    authStatusMsg.textContent = 'Verification error: ' + err.message;
-    authStatusMsg.style.color = '#f87171';
+    authStatusMsg.innerHTML = '<span style="color: #f87171;">❌ Verification error: ' + err.message + '</span>';
     tgVerifyCodeBtn.disabled = false;
     tgVerifyCodeBtn.textContent = 'Verify & Connect';
   }

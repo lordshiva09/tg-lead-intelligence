@@ -137,6 +137,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 1b. API: Telegram Reset / Logout Session
+  if (pathname === '/api/tg-reset' && req.method === 'POST') {
+    try {
+      const result = await tgClient.resetAuth();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
   // 2. API: Send Telegram Auth Code
   if (pathname === '/api/tg-send-code' && req.method === 'POST') {
     let body = '';
@@ -149,6 +162,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
+        console.error('[API Send Code Error]:', err.message);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: err.message }));
       }

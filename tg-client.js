@@ -71,19 +71,61 @@ async function initClient() {
     }
   } catch (err) {
     console.error('Telegram MTProto connect error:', err.message);
+    // If the saved session is duplicated, revoked, or invalid, reset to a clean session immediately
+    if (/AUTH_KEY_DUPLICATED|AUTH_KEY_UNREGISTERED|SESSION_REVOKED|406/i.test(err.message)) {
+      console.warn('⚠️ Stale or duplicated Telegram session detected. Resetting to clean session...');
+      saveSession('');
+      client = new TelegramClient(new StringSession(''), API_ID, API_HASH, {
+        connectionRetries: 5,
+        useWSS: false
+      });
+      try {
+        await client.connect();
+        console.log('✅ Reconnected with clean session, ready for authentication.');
+      } catch (connErr) {
+        console.error('Error connecting with clean session:', connErr.message);
+      }
+    }
   }
 }
 
 // 1. Send OTP code to Telegram / SMS
 async function sendAuthCode(phone) {
-  if (!client) await initClient();
   if (!phone) throw new Error('Phone number is required');
 
-  loginState.phone = phone.trim();
+  // Normalize phone number (remove spaces, hyphens, brackets)
+  let cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+  if (!cleanPhone.startsWith('+')) {
+    // If user provided a 10-digit number without country code, default to +91
+    if (cleanPhone.length === 10) {
+      cleanPhone = '+91' + cleanPhone;
+    } else {
+      cleanPhone = '+' + cleanPhone;
+    }
+  }
+
+  // Ensure client exists and is connected
+  if (!client || !client.connected) {
+    await initClient();
+  }
+
+  // If client is still not connected or had a previous fatal error, recreate with empty session
+  if (!client || !client.connected) {
+    client = new TelegramClient(new StringSession(''), API_ID, API_HASH, {
+      connectionRetries: 3,
+      useWSS: false
+    });
+    await client.connect();
+  }
+
+  loginState.phone = cleanPhone;
   loginState.error = null;
 
   try {
-    const res = await client.sendCode(
+    console.log(`[Telegram Auth] Requesting code for phone: ${cleanPhone}...`);
+
+    // Wrap in 25-second timeout so requests never hang indefinitely on cloud hosts
+    const sendCodePromise = client.sendCode(
       {
         apiId: API_ID,
         apiHash: API_HASH
@@ -91,12 +133,41 @@ async function sendAuthCode(phone) {
       loginState.phone
     );
 
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Telegram request timed out after 25s. Please check connection and try again.')), 25000)
+    );
+
+    const res = await Promise.race([sendCodePromise, timeoutPromise]);
+
     loginState.phoneCodeHash = res.phoneCodeHash;
     loginState.status = 'code_sent';
-    return { ok: true, message: 'OTP sent to your Telegram app/SMS' };
+
+    const isApp = !!res.isCodeViaApp;
+    console.log(`[Telegram Auth] Code sent successfully. Via app: ${isApp}`);
+
+    return {
+      ok: true,
+      message: isApp
+        ? 'OTP sent to your Telegram App! (Check Telegram app messages, NOT SMS)'
+        : 'OTP sent via SMS!',
+      isCodeViaApp: isApp,
+      phone: cleanPhone
+    };
   } catch (err) {
+    console.error('[Telegram Auth Error]:', err.message);
     loginState.error = err.message;
     loginState.status = 'error';
+
+    // If auth key duplicated error occurred during sendCode, reset client immediately
+    if (/AUTH_KEY_DUPLICATED|AUTH_KEY_UNREGISTERED|406/i.test(err.message)) {
+      saveSession('');
+      client = new TelegramClient(new StringSession(''), API_ID, API_HASH, {
+        connectionRetries: 3,
+        useWSS: false
+      });
+      client.connect().catch(() => {});
+    }
+
     throw err;
   }
 }
@@ -141,19 +212,62 @@ async function verifyAuthCode(code, password = '') {
     isConnected = true;
     loginState.status = 'authenticated';
     loginState.error = null;
-    return { ok: true, message: 'Successfully logged in to Telegram!' };
+
+    console.log('\n=========================================');
+    console.log('🎉 TELEGRAM LOGIN SUCCESSFUL!');
+    console.log('Copy this session for Render Environment Variable TG_SESSION:');
+    console.log(sessionStr);
+    console.log('=========================================\n');
+
+    return {
+      ok: true,
+      message: 'Successfully logged in to Telegram!',
+      session: sessionStr
+    };
   } catch (err) {
     loginState.error = err.message;
     throw err;
   }
 }
 
+async function resetAuth() {
+  try {
+    if (client) {
+      try { await client.disconnect(); } catch (e) {}
+    }
+  } catch (e) {}
+  saveSession('');
+  isConnected = false;
+  loginState = {
+    status: 'idle',
+    phone: '',
+    phoneCodeHash: '',
+    error: null
+  };
+  client = new TelegramClient(new StringSession(''), API_ID, API_HASH, {
+    connectionRetries: 3,
+    useWSS: false
+  });
+  try {
+    await client.connect();
+  } catch (e) {}
+  return { ok: true, message: 'Telegram session reset successfully.' };
+}
+
 function getAuthStatus() {
+  let sessionStr = '';
+  try {
+    if (isConnected && client && client.session) {
+      sessionStr = client.session.save() || '';
+    }
+  } catch (e) {}
+
   return {
     isConnected,
     status: loginState.status,
     phone: loginState.phone ? loginState.phone.slice(-4).padStart(loginState.phone.length, '*') : '',
-    error: loginState.error
+    error: loginState.error,
+    sessionStr: sessionStr
   };
 }
 
@@ -373,6 +487,7 @@ module.exports = {
   initClient,
   sendAuthCode,
   verifyAuthCode,
+  resetAuth,
   getAuthStatus,
   searchTelegram,
   API_ID,
